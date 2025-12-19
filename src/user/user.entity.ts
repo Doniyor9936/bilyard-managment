@@ -24,8 +24,8 @@ export class User {
   @Column()
   password: string;
 
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.STAFF })
-  role: 'OWNER' | 'STAFF';
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.OWNER })
+  role: UserRole;
 
   @Column({ default: true })
   isActive: boolean;
