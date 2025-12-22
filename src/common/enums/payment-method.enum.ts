@@ -3,4 +3,6 @@ export enum PaymentMethod {
   CARD = 'karta',
   CASHBACK = 'cashback',
   DEBT = 'qarz',
+  QR = 'qr',
+  MIXED = 'mixed',
 }

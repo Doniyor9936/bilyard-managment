@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { User } from './user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -7,43 +7,62 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class UserService {
-    constructor(@InjectRepository(User) private readonly userRepository: Repository<User>) { }
+  constructor(@InjectRepository(User) private readonly userRepository: Repository<User>) {}
 
-    async createUser(dto: Partial<User>): Promise<User> {
-        const user = this.userRepository.create(dto);
-        return this.userRepository.save(user);
+  async createUser(dto: Partial<User>): Promise<User> {
+    const user = this.userRepository.create(dto);
+    return this.userRepository.save(user);
+  }
+
+  async getUserById(id: string): Promise<User> {
+    const findUser = await this.userRepository.findOne({
+      where: { id },
+    });
+    if (!findUser) {
+      throw new NotFoundException('Foydalanuvchi topilmadi');
+    }
+    return findUser;
+  }
+
+  async getUserByIdOrFail(id: string): Promise<User> {
+    const findUser = await this.userRepository.findOne({ where: { id } });
+    if (!findUser) {
+      throw new NotFoundException('Foydalanuvchi topilmadi');
+    }
+    return findUser;
+  }
+
+  async updateUser(id: string, dto: Partial<User>): Promise<User> {
+    const user = await this.getUserByIdOrFail(id);
+
+    await this.userRepository.update(id, dto);
+
+    return this.getUserByIdOrFail(id);
+  }
+
+  async findByPhone(phoneNumber: string): Promise<User | null> {
+    const findUser = await this.userRepository.findOne({
+      where: { phoneNumber },
+    });
+    return findUser;
+  }
+
+  async changePassword(id: string, dto: ChangePasswordDto): Promise<{ message: string }> {
+    const user = await this.getUserByIdOrFail(id);
+
+    const isOldMatch = await bcrypt.compare(dto.oldPassword, user.password);
+
+    if (!isOldMatch) {
+      throw new BadRequestException("Eski parol noto'g'ri");
     }
 
-    async getUserById(accountId: string): Promise<User | null> {
-        const findUser = await this.userRepository.findOne({ where: { accountId } });
-        if (!findUser) {
-            throw new NotFoundException("foydalanuvchi topilmadi");
-        }
-        return findUser;
-    }
-    async updateUser(id: string, dto: Partial<User>): Promise<User> {
-        await this.userRepository.update(id, dto);
-        return this.getUserById(id) as Promise<User>;
-    }
+    const hashedNewPassword = await bcrypt.hash(dto.newPassword, 10);
 
-    async findByPhone(phoneNumber: string) {
-        const findUser = this.userRepository.findOne({ where: { phoneNumber } })
-        if (!findUser) {
-            throw new NotFoundException("foydalanuvchi topilmadi");
-        }
-        return findUser;
-    }
+    await this.userRepository.update(id, {
+      password: hashedNewPassword,
+      mustChangePassword: false,
+    });
 
-    async changePassword(id: string, dto: ChangePasswordDto): Promise<void> {
-        const user = await this.userRepository.findOne({ where: { id } })
-        if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');
-
-        const isOldMatch = await bcrypt.compare(dto.oldPassword, user.password);
-        if (!isOldMatch) {
-            throw new Error('Eski parol noto‘g‘ri');
-        }
-
-        const hashedNewPassword = await bcrypt.hash(dto.newPassword, 10);
-        await this.userRepository.update(id, { password: hashedNewPassword, mustChangePassword: false });
-    }
+    return { message: "Parol muvaffaqiyatli o'zgartirildi" };
+  }
 }

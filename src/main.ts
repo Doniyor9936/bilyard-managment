@@ -7,21 +7,21 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const config = new DocumentBuilder()
-  .setTitle('Billiard ERP API')
-  .setDescription('Bilyard klubi uchun ERP tizimi API hujjatlari')
-  .setVersion('1.0')
-  .addBearerAuth(
-    {
-      type: 'http',
-      scheme: 'bearer',
-      bearerFormat: 'JWT',
-    },
-    'JWT-auth',
-  )
-  .build();
+    .setTitle('Billiard ERP API')
+    .setDescription('Bilyard klubi uchun ERP tizimi API hujjatlari')
+    .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+      },
+      'JWT-auth',
+    )
+    .build();
 
-const document = SwaggerModule.createDocument(app, config);
-SwaggerModule.setup('api/docs', app, document);
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document);
 
   await app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);

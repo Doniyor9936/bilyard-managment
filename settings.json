@@ -1,0 +1,14 @@
+{
+  "editor.formatOnSave": false,
+  "editor.formatOnType": false,
+  "editor.formatOnPaste": false,
+
+  "editor.wordWrap": "off",
+
+  "editor.rulers": [200],
+
+  "eslint.format.enable": false,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": false
+  }
+}

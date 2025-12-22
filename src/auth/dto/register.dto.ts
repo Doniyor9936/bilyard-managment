@@ -23,8 +23,6 @@ export class RegisterDto {
   @IsEnum(UserRole, { message: "Noto'g'ri rol tanlandi" })
   readonly role: UserRole;
 
-  @IsString()
-  readonly accountId: string;
 
   @IsOptional()
   readonly mustChangePassword?: boolean; // Default: true bo'ladi

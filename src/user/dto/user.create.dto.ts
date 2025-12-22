@@ -22,7 +22,4 @@ export class UserCreateDto {
   @IsEnum(UserRole, { message: "Noto'g'ri rol tanlandi" })
   @IsOptional()
   readonly role: UserRole;
-
-  @IsString()
-  readonly accountId: string;
 }
