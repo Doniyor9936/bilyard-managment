@@ -9,5 +9,9 @@ import { Session } from 'src/sessions/session.entity';
   imports: [TypeOrmModule.forFeature([Order, Session])],
   controllers: [OrdersController],
   providers: [OrdersService],
+   exports: [
+    OrdersService,    // 👈 SHART
+    TypeOrmModule,    // 👈 agar repo kerak bo‘lsa
+  ],
 })
 export class OrdersModule { }
