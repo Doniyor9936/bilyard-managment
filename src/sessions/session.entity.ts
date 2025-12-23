@@ -41,6 +41,9 @@ export class Session {
   @Column({ type: 'timestamp', nullable: true })
   endedAt: Date | null;
 
+  @Column({ type: 'timestamp' })
+  lastPointCalculatedAt: Date; // 🔥 YANGI
+
   @Column({ type: 'enum', enum: SessionStatus })
   status: SessionStatus;
 }

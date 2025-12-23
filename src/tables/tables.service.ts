@@ -9,7 +9,7 @@ export class TablesService {
   constructor(
     @InjectRepository(TableEntity)
     private readonly tableRepo: Repository<TableEntity>,
-  ) {}
+  ) { }
 
   // ===============================
   // ➕ STOL YARATISH (ADMIN)
@@ -95,28 +95,31 @@ export class TablesService {
   // ===============================
   // 🔒 SESSIYA OCHILGANDA
   // ===============================
-  async markAsOccupied(tableId: string) {
-    const table = await this.getById(tableId);
-
-    if (!table.isActive) {
-      throw new BadRequestException('Stol faol emas');
+  async markAsOccupied(id: string) {
+    const table = await this.tableRepo.findOneBy({ id });
+    if (!table) {
+      throw new NotFoundException('Stol topilmadi');
     }
 
-    if (table.isOccupied) {
-      throw new BadRequestException('Stol allaqachon band');
-    }
+    if (table.isOccupied) return; // 🔒 qayta update qilmaymiz
 
-    table.isOccupied = true;
+    table.isOccupied = true; // 🔥 MANA SHU MUHIM
     await this.tableRepo.save(table);
   }
 
   // ===============================
   // 🔓 SESSIYA YOPILGANDA
   // ===============================
-  async markAsFree(tableId: string) {
-    const table = await this.getById(tableId);
+  async markAsFree(id: string) {
+    const table = await this.tableRepo.findOneBy({ id });
+    if (!table) {
+      throw new NotFoundException('Stol topilmadi');
+    }
+
+    if (!table.isOccupied) return;
 
     table.isOccupied = false;
     await this.tableRepo.save(table);
   }
+
 }

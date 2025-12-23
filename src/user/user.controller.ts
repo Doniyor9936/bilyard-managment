@@ -13,25 +13,25 @@ export class UserController {
   constructor(private readonly userService: UserService) { }
 
   @Post()
-  @Roles(UserRole.OWNER)
+  @Roles(UserRole.ADMIN)
   async createUser(@Body() dto: UserCreateDto) {
     return this.userService.createUser(dto)
   }
 
   @Get('phone/:phoneNumber')
-  @Roles(UserRole.OWNER)
+  @Roles(UserRole.ADMIN)
   async findByPhone(@Param('phoneNumber') phoneNumber: string) {
     return this.userService.findByPhone(phoneNumber)
   }
 
   @Get(':accountId')
-  @Roles(UserRole.OWNER)
+  @Roles(UserRole.ADMIN)
   async getUserById(@Param('accountId') accountId: string) {
     return this.userService.getUserById(accountId)
   }
 
   @Put(':id')
-  @Roles(UserRole.OWNER)
+  @Roles(UserRole.ADMIN)
   async updateUser(@Param('id') id: string, @Body() dto: UserUpdateDto) {
     return this.userService.updateUser(id, dto)
   }
