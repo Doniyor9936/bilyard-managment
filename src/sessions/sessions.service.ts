@@ -14,7 +14,6 @@ import { User } from 'src/user/user.entity';
 
 import { PaymentsService } from 'src/billing/payments/payments.service';
 import { LoyaltyService } from 'src/loyalty/loyalty.service';
-import { OrdersService } from 'src/orders/orders.service';
 import { SettingsService } from 'src/settings/settings.service';
 
 import { SessionStatus } from 'src/common/enums/session-status.enum';
@@ -37,21 +36,21 @@ export class SessionsService {
 
     private readonly paymentsService: PaymentsService,
     private readonly loyaltyService: LoyaltyService,
-    private readonly ordersService: OrdersService,
     private readonly settingsService: SettingsService,
   ) { }
 
   // =====================================================
-  // ▶️ SESSIYA OCHISH
+  // ▶️ SESSIYA OCHISH (MIJOZ MAJBURIY)
   // =====================================================
-  async openSession(
-    tableId: string,
-    customerId: string | undefined,
-    openedBy: User,
-  ) {
+  async openSession(params: {
+    tableId: string;
+    customerId: string;
+    openedBy: User;
+  }) {
     return this.dataSource.transaction(async (manager) => {
+      // 1️⃣ Stolni lock qilamiz
       const table = await manager.findOne(TableEntity, {
-        where: { id: tableId },
+        where: { id: params.tableId },
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -59,9 +58,14 @@ export class SessionsService {
       if (!table.isActive) throw new BadRequestException('Stol faol emas');
       if (table.isOccupied) throw new BadRequestException('Stol band');
 
-      const now = new Date();
+      // 2️⃣ Mijozni tekshiramiz
+      const customer = await manager.findOne(Customer, {
+        where: { id: params.customerId },
+      });
 
-      // 🔥 STOlNI FAQAT UPDATE BILAN BAND QILAMIZ
+      if (!customer) throw new NotFoundException('Mijoz topilmadi');
+
+      // 3️⃣ Stolni band qilamiz
       const updateResult = await manager.update(
         TableEntity,
         { id: table.id, isOccupied: false },
@@ -72,147 +76,20 @@ export class SessionsService {
         throw new BadRequestException('Stol band (parallel so‘rov)');
       }
 
-      const customer = customerId
-        ? await manager.findOne(Customer, { where: { id: customerId } })
-        : null;
+      // 4️⃣ Sessiya yaratamiz
+      const now = new Date();
 
       const session = manager.create(Session, {
-        table: { id: table.id } as TableEntity, // ⚠️ TOZA REFERENCE
-        customer: customer ? ({ id: customer.id } as Customer) : null,
-        openedBy: { id: openedBy.id } as User,
+        table,
+        customer,
+        openedBy: params.openedBy,
         startedAt: now,
         lastPointCalculatedAt: now,
         status: SessionStatus.ACTIVE,
       });
 
-      await manager.insert(Session, session);
-
+      await manager.save(session);
       return session;
-    });
-  }
-
-
-  // =====================================================
-  // ⏹ SESSIYANI YOPISH
-  // =====================================================
-  async closeSession(
-    sessionId: string,
-    paymentMethod: PaymentMethod,
-    closedBy: User,
-  ) {
-    return this.finishSession(sessionId, paymentMethod, closedBy);
-  }
-
-  // =====================================================
-  // 🚨 ADMIN FORCE CLOSE
-  // =====================================================
-  async forceClose(sessionId: string, user: User) {
-    if (user.role !== UserRole.ADMIN) {
-      throw new ForbiddenException('Faqat admin ruxsatiga ega');
-    }
-    return this.finishSession(sessionId, PaymentMethod.DEBT, user);
-  }
-
-  // =====================================================
-  // 🔒 SESSIYANI YOPISH (ASOSIY LOGIKA)
-  // =====================================================
-  private async finishSession(
-    sessionId: string,
-    paymentMethod: PaymentMethod,
-    closedBy: User,
-  ) {
-    return this.dataSource.transaction(async (manager) => {
-      // 1️⃣ SESSIONNI LOCK QILAMIZ (relationssiz)
-      const lockedSession = await manager
-        .createQueryBuilder(Session, 's')
-        .setLock('pessimistic_write')
-        .where('s.id = :id', { id: sessionId })
-        .getOne();
-
-      if (!lockedSession) {
-        throw new NotFoundException('Sessiya topilmadi');
-      }
-
-      if (lockedSession.status === SessionStatus.COMPLETED) {
-        throw new BadRequestException('Sessiya allaqachon yopilgan');
-      }
-
-      // 2️⃣ FULL SESSIONNI RELATIONLAR BILAN OLAMIZ (LOCK YO‘Q)
-      const session = await manager.findOne(Session, {
-        where: { id: sessionId },
-        relations: ['table', 'customer'],
-      });
-
-      if (!session || !session.table) {
-        throw new NotFoundException('Sessiya yoki stol topilmadi');
-      }
-
-      const endedAt = new Date();
-
-      // 3️⃣ SESSION STATUS UPDATE
-      await manager.update(
-        Session,
-        { id: session.id },
-        {
-          status: SessionStatus.COMPLETED,
-          endedAt,
-          closedBy: { id: closedBy.id } as User,
-        },
-      );
-
-      // 4️⃣ VAQT HISOBLASH
-      const minutes = Math.max(
-        1,
-        Math.ceil(
-          (endedAt.getTime() - session.startedAt.getTime()) / 60000,
-        ),
-      );
-      const hours = Math.ceil(minutes / 60);
-
-      // 5️⃣ SUMMALAR
-      const hourPrice = await this.settingsService.getSoatNarxi(
-        session.table.type,
-      );
-      const tableAmount = hours * hourPrice;
-
-      const ordersAmount =
-        await this.ordersService.getSessionOrdersSum(session.id);
-
-      const totalAmount = tableAmount + ordersAmount;
-
-      // 6️⃣ PAYMENT
-      await this.paymentsService.createPayment({
-        session: { id: session.id } as Session,
-        customer: session.customer ?? undefined,
-        user: closedBy,
-        amount: totalAmount,
-        method: paymentMethod,
-      });
-
-      // 7️⃣ LOYALTY BALL
-      if (session.customer) {
-        await this.loyaltyService.sessiyaUchunBall(
-          { ...session, endedAt } as Session,
-          session.customer,
-          closedBy,
-        );
-      }
-
-      // 8️⃣ STOLNI BO‘SHATAMIZ
-      await manager.update(
-        TableEntity,
-        { id: session.table.id, isOccupied: true },
-        { isOccupied: false },
-      );
-
-      // 9️⃣ RESPONSE
-      return {
-        sessionId: session.id,
-        hours,
-        tableAmount,
-        ordersAmount,
-        totalAmount,
-      };
     });
   }
 
@@ -225,9 +102,15 @@ export class SessionsService {
     });
 
     if (!session) throw new NotFoundException('Sessiya topilmadi');
-    if (session.status === SessionStatus.PAUSED) return session;
+
+    if (session.status === SessionStatus.PAUSED) {
+      return session;
+    }
+
     if (session.status !== SessionStatus.ACTIVE) {
-      throw new BadRequestException('Faqat faol sessiya pauzaga qo‘yiladi');
+      throw new BadRequestException(
+        'Faqat faol sessiyani pauzaga qo‘yish mumkin',
+      );
     }
 
     session.status = SessionStatus.PAUSED;
@@ -243,14 +126,127 @@ export class SessionsService {
     });
 
     if (!session) throw new NotFoundException('Sessiya topilmadi');
-    if (session.status === SessionStatus.ACTIVE) return session;
+
+    if (session.status === SessionStatus.ACTIVE) {
+      return session;
+    }
+
     if (session.status !== SessionStatus.PAUSED) {
-      throw new BadRequestException('Faqat pauzadagi sessiya davom ettiriladi');
+      throw new BadRequestException(
+        'Faqat pauzadagi sessiyani davom ettirish mumkin',
+      );
     }
 
     session.status = SessionStatus.ACTIVE;
     session.lastPointCalculatedAt = new Date();
 
     return this.sessionRepo.save(session);
+  }
+
+  // =====================================================
+  // ⏹ SESSIYANI YOPISH (HISOB + PAYMENT + BALL)
+  // =====================================================
+  async closeSession(
+    sessionId: string,
+    paymentMethod: PaymentMethod,
+    closedBy: User,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      // 1️⃣ LOCK + RELATIONS
+      const session = await manager.findOne(Session, {
+        where: { id: sessionId },
+        relations: ['table', 'customer'],
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!session) throw new NotFoundException('Sessiya topilmadi');
+
+      if (![SessionStatus.ACTIVE, SessionStatus.PAUSED].includes(session.status)) {
+        throw new BadRequestException('Sessiyani yopib bo‘lmaydi');
+      }
+
+      // 2️⃣ VAQT
+      const endedAt = new Date();
+      const minutes = Math.max(
+        1,
+        Math.ceil(
+          (endedAt.getTime() - session.startedAt.getTime()) / 60000,
+        ),
+      );
+      const hours = Math.ceil(minutes / 60);
+
+      // 3️⃣ STOL HISOBI
+      const hourPrice = await this.settingsService.getSoatNarxi(
+        session.table.type,
+      );
+      const tableAmount = hours * hourPrice;
+
+      // 4️⃣ BUYURTMALAR
+      const raw = await manager
+        .createQueryBuilder()
+        .select('COALESCE(SUM(o.price * o.quantity), 0)', 'sum')
+        .from('orders', 'o')
+        .where('o.session_id = :id', { id: session.id })
+        .andWhere('o.isCancelled = false')
+        .getRawOne<{ sum: string }>();
+
+      const ordersAmount = Number(raw?.sum ?? 0);
+      const totalAmount = tableAmount + ordersAmount;
+
+      // 5️⃣ PAYMENT
+      await this.paymentsService.createPayment({
+        sessionId: session.id,
+        customerId: session.customer.id,
+        userId: closedBy.id,
+        amount: totalAmount,
+        method: paymentMethod,
+      });
+
+      // 6️⃣ SESSIYA YOPISH
+      session.status = SessionStatus.COMPLETED;
+      session.endedAt = endedAt;
+      session.closedBy = closedBy;
+      await manager.save(session);
+
+      // 7️⃣ STOLNI BO‘SHATISH
+      session.table.isOccupied = false;
+      await manager.save(session.table);
+
+      // 8️⃣ BALL
+      const pointsEarned =
+        await this.loyaltyService.calculateFinalSessionPoints(
+          session,
+          session.customer,
+          closedBy,
+        );
+
+      // 9️⃣ RESPONSE (SESSION + RECEIPT)
+      return {
+        session: {
+          id: session.id,
+          startedAt: session.startedAt,
+          endedAt,
+          hours,
+          status: session.status,
+        },
+        receipt: {
+          tableAmount,
+          ordersAmount,
+          totalAmount,
+          pointsEarned,
+        },
+      };
+    });
+  }
+
+  // =====================================================
+  // 🚨 ADMIN FORCE CLOSE
+  // =====================================================
+  async forceClose(sessionId: string, user: User) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Faqat admin ruxsatiga ega');
+    }
+
+    return this.closeSession(sessionId, PaymentMethod.DEBT, user);
   }
 }

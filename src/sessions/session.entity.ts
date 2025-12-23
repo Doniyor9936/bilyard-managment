@@ -23,7 +23,7 @@ export class Session {
   // Qaysi mijoz
   @ManyToOne(() => Customer, { nullable: true })
   @JoinColumn({ name: 'customer_id' })
-  customer: Customer | null;
+  customer: Customer;
 
   // Sessiyani kim ochdi
   @ManyToOne(() => User)

@@ -19,48 +19,63 @@ export class LoyaltyService {
   ) { }
 
   // =====================================================
-  // 1️⃣ SESSIYA UCHUN BALL QO‘SHISH (SOAT ORALIG‘I BO‘YICHA)
+  // 🔹 SESSIYA YAKUNIDA BALL HISOBLASH (ASOSIY METOD)
   // =====================================================
-  async sessiyaUchunBall(
+  async calculateFinalSessionPoints(
     session: Session,
     customer: Customer,
-    amalniBajargan: User,
-  ): Promise<void> {
-    if (!session.startedAt || !session.endedAt) return;
+    closedBy: User,
+  ): Promise<number> {
+    if (!session.startedAt || !session.endedAt) {
+      return 0;
+    }
 
+    // 1️⃣ O‘ynalgan vaqt
     const ms = session.endedAt.getTime() - session.startedAt.getTime();
+    if (ms <= 0) return 0;
+
     const soat = Math.ceil(ms / 3600000);
 
-    // Aktiv qoidalarni olamiz
+    // 2️⃣ Faol qoidalarni olamiz
     const rules = await this.ruleRepo.find({
       where: { faol: true },
       order: { minSoat: 'DESC' },
     });
 
-    // Mos keladigan qoidani topamiz
-    const rule = rules.find(
-      (r) =>
-        soat >= r.minSoat &&
-        (r.maxSoat === null || r.maxSoat === undefined || soat <= r.maxSoat),
-    );
+    // 3️⃣ Mos qoida
+    // 3️⃣ Mos qoida
+    const rule = rules.find((r) => {
+      if (soat < r.minSoat) {
+        return false;
+      }
 
-    if (!rule || rule.beriladiganBall <= 0) return;
+      if (r.maxSoat === undefined || r.maxSoat === null) {
+        return true;
+      }
 
-    const tx = this.txRepo.create({
-      customer,
-      session,
-      ball: rule.beriladiganBall,
-      turi: BallHarakatiTuri.QOSHILDI,
-      bajarganUser: amalniBajargan,
-      izoh: `Sessiya uchun ${rule.beriladiganBall} ball`,
-      yaratilganVaqt: new Date(),
+      return soat <= r.maxSoat;
     });
 
-    await this.txRepo.save(tx);
-  }
+    // ⚠️ MUHIM: rule topilmasa chiqib ketamiz
+    if (!rule || rule.beriladiganBall <= 0) {
+      return 0;
+    }
 
+    // 4️⃣ Ball yozamiz
+    await this.txRepo.insert({
+      customer: { id: customer.id },
+      session: { id: session.id },
+      ball: rule.beriladiganBall,
+      turi: BallHarakatiTuri.QOSHILDI,
+      bajarganUser: { id: closedBy.id },
+      izoh: `Sessiya (${soat} soat) uchun ${rule.beriladiganBall} ball`,
+      yaratilganVaqt: session.endedAt,
+    });
+
+    return rule.beriladiganBall;
+  }
   // =====================================================
-  // 2️⃣ MIJOZ BALL BALANSI (QUERYBUILDER YO‘Q)
+  // 🔹 MIJOZ BALL BALANSI
   // =====================================================
   async mijozBallBalansi(customerId: string): Promise<number> {
     const transactions = await this.txRepo.find({
@@ -70,19 +85,17 @@ export class LoyaltyService {
     let balans = 0;
 
     for (const tx of transactions) {
-      if (tx.turi === BallHarakatiTuri.QOSHILDI) {
-        balans += tx.ball;
-      }
-      if (tx.turi === BallHarakatiTuri.AYIRILDI) {
-        balans -= tx.ball;
-      }
+      balans +=
+        tx.turi === BallHarakatiTuri.QOSHILDI
+          ? tx.ball
+          : -tx.ball;
     }
 
     return balans;
   }
 
   // =====================================================
-  // 3️⃣ MIJOZ BALL TARIXI
+  // 🔹 MIJOZ BALL TARIXI
   // =====================================================
   async mijozBallTarixi(customerId: string) {
     return this.txRepo.find({
@@ -92,25 +105,7 @@ export class LoyaltyService {
   }
 
   // =====================================================
-  // 4️⃣ SESSIYA UCHUN TAXMINIY BALL (OLDINDAN KO‘RISH)
-  // =====================================================
-  async taxminiyBall(soat: number): Promise<number> {
-    const rules = await this.ruleRepo.find({
-      where: { faol: true },
-      order: { minSoat: 'DESC' },
-    });
-
-    const rule = rules.find(
-      (r) =>
-        soat >= r.minSoat &&
-        (r.maxSoat === null || r.maxSoat === undefined || soat <= r.maxSoat),
-    );
-
-    return rule?.beriladiganBall ?? 0;
-  }
-
-  // =====================================================
-  // 6️⃣ ADMIN TOMONIDAN BALLNI QO‘LDA O‘ZGARTIRISH
+  // 🔹 ADMIN TOMONIDAN BALL O‘ZGARTIRISH
   // =====================================================
   async adminBallOzgartirish(params: {
     customerId: string;
@@ -118,14 +113,13 @@ export class LoyaltyService {
     turi: BallHarakatiTuri;
     user: User;
     izoh?: string;
-  }): Promise<PointTransaction> {
+  }): Promise<void> {
     const { customerId, ball, turi, user, izoh } = params;
 
     if (ball <= 0) {
       throw new BadRequestException('Ball miqdori noto‘g‘ri');
     }
 
-    // Agar ayirish bo‘lsa — balansni tekshiramiz
     if (turi === BallHarakatiTuri.AYIRILDI) {
       const balans = await this.mijozBallBalansi(customerId);
       if (balans < ball) {
@@ -133,17 +127,14 @@ export class LoyaltyService {
       }
     }
 
-    const tx = this.txRepo.create({
+    await this.txRepo.insert({
       customer: { id: customerId },
       session: null,
       ball,
       turi,
-      bajarganUser: user,
-      izoh: izoh ?? 'Admin tomonidan qo‘lda o‘zgartirildi',
+      bajarganUser: { id: user.id },
+      izoh: izoh ?? 'Admin tomonidan o‘zgartirildi',
       yaratilganVaqt: new Date(),
     });
-
-    return this.txRepo.save(tx);
   }
-
 }

@@ -23,12 +23,10 @@ export class DebtService {
    * (XODIM ham, ADMIN ham ishlata oladi)
    */
   async qarzniTolash(debtId: string, summa: number, foydalanuvchi: User) {
-    // 1️⃣ Summa tekshiruvi
     if (!summa || summa <= 0) {
       throw new BadRequestException('To‘lov summasi noto‘g‘ri kiritildi');
     }
 
-    // 2️⃣ Qarzni topamiz
     const qarz = await this.debtRepository.findOne({
       where: { id: debtId },
     });
@@ -37,51 +35,56 @@ export class DebtService {
       throw new BadRequestException('Qarz topilmadi');
     }
 
-    // 3️⃣ Agar qarz allaqachon yopilgan bo‘lsa
     if (qarz.status === DebtStatus.YOPILGAN) {
       throw new BadRequestException('Bu qarz allaqachon yopilgan');
     }
 
-    // 4️⃣ Qolgan qarz summasini hisoblaymiz
     const qolganSumma = qarz.totalAmount - qarz.paidAmount;
 
     if (summa > qolganSumma) {
-      throw new BadRequestException(`Ortiqcha to‘lov kiritildi. Qolgan summa: ${qolganSumma}`);
+      throw new BadRequestException(
+        `Ortiqcha to‘lov kiritildi. Qolgan summa: ${qolganSumma}`,
+      );
     }
 
-    // 5️⃣ Qarzni to‘lash yozuvi (tarix uchun)
+    // 1️⃣ Payment history (BU JOYDA save OK)
     const qarzTolovi = this.debtPaymentRepository.create({
-      debt: qarz,
+      debt: { id: qarz.id },
       amount: summa,
-      receivedBy: foydalanuvchi,
+      receivedBy: { id: foydalanuvchi.id },
       paidAt: new Date(),
     });
 
     await this.debtPaymentRepository.save(qarzTolovi);
 
-    // 6️⃣ Qarzni yangilaymiz
-    qarz.paidAmount += summa;
+    // 2️⃣ Debt update
+    const newPaidAmount = qarz.paidAmount + summa;
 
-    if (qarz.paidAmount === qarz.totalAmount) {
-      qarz.status = DebtStatus.YOPILGAN; // Qarz to‘liq yopildi
-    } else {
-      qarz.status = DebtStatus.QISMAN; // Qarz qisman to‘landi
-    }
+    await this.debtRepository.update(
+      { id: qarz.id },
+      {
+        paidAmount: newPaidAmount,
+        status:
+          newPaidAmount === qarz.totalAmount
+            ? DebtStatus.YOPILGAN
+            : DebtStatus.QISMAN,
+      },
+    );
 
-    await this.debtRepository.save(qarz);
-
-    // 7️⃣ Natija
     return {
-      xabar: qarz.status === DebtStatus.YOPILGAN ? 'Qarz to‘liq yopildi' : 'Qarz qisman to‘landi',
-      qarz,
+      xabar:
+        newPaidAmount === qarz.totalAmount
+          ? 'Qarz to‘liq yopildi'
+          : 'Qarz qisman to‘landi',
     };
   }
+
 
   async createDebt(params: {
     customer: Customer;
     session: Session;
     amount: number;
-  }): Promise<Debt> {
+  }): Promise<void> {
     const { customer, session, amount } = params;
 
     if (!customer) {
@@ -92,16 +95,13 @@ export class DebtService {
       throw new BadRequestException('Qarz summasi noto‘g‘ri');
     }
 
-    const debt = this.debtRepository.create({
-      customer,
-      session,
+    await this.debtRepository.insert({
+      customer: { id: customer.id },
+      session: { id: session.id },
       totalAmount: amount,
       paidAmount: 0,
       status: DebtStatus.OCHIQ,
       createdAt: new Date(),
     });
-
-    return this.debtRepository.save(debt);
   }
-
 }

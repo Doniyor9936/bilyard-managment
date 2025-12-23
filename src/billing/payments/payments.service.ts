@@ -13,52 +13,49 @@ import { DebtStatus } from "src/common/enums/debt.status.enum";
 export class PaymentsService {
   constructor(
     @InjectRepository(Payment)
-    private paymentRepo: Repository<Payment>,
+    private readonly paymentRepo: Repository<Payment>,
 
     @InjectRepository(Debt)
-    private debtRepo: Repository<Debt>,
-  ) {}
+    private readonly debtRepo: Repository<Debt>,
+  ) { }
 
   async createPayment(params: {
-    session: Session;
-    customer?: Customer;
-    user: User;
+    sessionId: string;
+    customerId?: string;
+    userId: string;
     amount: number;
     method: PaymentMethod;
   }) {
-    const { session, customer, user, amount, method } = params;
-  
-    if (method === PaymentMethod.DEBT && !customer) {
+    const { sessionId, customerId, userId, amount, method } = params;
+
+    if (method === PaymentMethod.DEBT && !customerId) {
       throw new BadRequestException('Qarz uchun mijoz majburiy');
     }
-  
-    // 1️⃣ Payment yozamiz
+
+    // 1️⃣ PAYMENT
     const payment = this.paymentRepo.create({
-      session: { id: session.id },
-      customer: customer ? { id: customer.id } : null,
-      receivedBy: { id: user.id },
+      session: { id: sessionId },
+      customer: customerId ? { id: customerId } : null,
+      receivedBy: { id: userId },
       amount,
       method,
       paidAt: new Date(),
     });
-  
+
     await this.paymentRepo.save(payment);
-  
-    // 2️⃣ Agar qarz bo‘lsa — Debt yaratamiz
+
+    // 2️⃣ DEBT
     if (method === PaymentMethod.DEBT) {
-      const debt = this.debtRepo.create({
-        customer: { id: customer!.id }, // ❗ relation ID bilan
-        session: { id: session.id },   // ❗ relation ID bilan
+      await this.debtRepo.insert({
+        customer: { id: customerId! },
+        session: { id: sessionId },
         totalAmount: amount,
         paidAmount: 0,
-        status: DebtStatus.OCHIQ,       // ✅ ENG MUHIM JOY
+        status: DebtStatus.OCHIQ,
         createdAt: new Date(),
       });
-  
-      await this.debtRepo.save(debt);
     }
-  
+
     return payment;
   }
-  
 }

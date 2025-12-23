@@ -1,41 +1,51 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PaymentsService } from './payments/payments.service';
 import { DebtService } from './debt/debt.service';
-import { LoyaltyService } from 'src/loyalty/loyalty.service';
 import { OrdersService } from 'src/orders/orders.service';
 import { SettingsService } from 'src/settings/settings.service';
 import { Session } from 'src/sessions/session.entity';
 import { PaymentMethod } from 'src/common/enums/payment-method.enum';
 import { User } from 'src/user/user.entity';
+import { SessionStatus } from 'src/common/enums/session-status.enum';
 
 @Injectable()
 export class BillingService {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly debtService: DebtService,
-    private readonly loyaltyService: LoyaltyService,
     private readonly ordersService: OrdersService,
     private readonly settingsService: SettingsService,
-  ) {}
+  ) { }
 
   // =====================================================
-  // 1️⃣ SESSIYA UCHUN HISOB CHIQARISH
+  // 1️⃣ SESSIYA UCHUN HISOB (READ-ONLY)
   // =====================================================
   async hisobChiqarish(session: Session) {
     if (!session.startedAt || !session.endedAt) {
       throw new BadRequestException('Sessiya vaqtlari noto‘g‘ri');
     }
 
-    // ⏱ O‘ynalgan vaqt
+    // ⏱ Vaqt
     const ms = session.endedAt.getTime() - session.startedAt.getTime();
+    if (ms <= 0) {
+      throw new BadRequestException('Sessiya vaqti noto‘g‘ri');
+    }
+
     const soat = Math.ceil(ms / 3600000);
 
     // 💰 Stol narxi
-    const soatNarxi = await this.settingsService.getSoatNarxi(session.table.type);
+    const soatNarxi = await this.settingsService.getSoatNarxi(
+      session.table.type,
+    );
     const stolSumma = soat * soatNarxi;
 
-    // 🧾 Buyurtmalar summasi
-    const buyurtmaSumma = await this.ordersService.getSessionOrdersSum(session.id);
+    // 🧾 Buyurtmalar
+    const buyurtmaSumma =
+      await this.ordersService.getSessionOrdersSum(session.id);
 
     const jamiSumma = stolSumma + buyurtmaSumma;
 
@@ -48,44 +58,51 @@ export class BillingService {
   }
 
   // =====================================================
-  // 2️⃣ SESSIYANI YOPISH + TO‘LOVNI RASMIYLASHTIRISH
+  // 2️⃣ PAYMENT + (Ixtiyoriy) DEBT
   // =====================================================
-  async sessiyaUchunTolov(params: { session: Session; method: PaymentMethod; user: User }) {
+  async sessiyaUchunTolov(params: {
+    session: Session;
+    method: PaymentMethod;
+    user: User;
+  }) {
     const { session, method, user } = params;
 
     if (!session) {
       throw new NotFoundException('Sessiya topilmadi');
     }
 
+    // ⚠️ FAQAT YOPILGAN SESSIYA UCHUN
+    if (session.status !== SessionStatus.COMPLETED) {
+      throw new BadRequestException(
+        'Avval sessiyani yopish kerak',
+      );
+    }
+
     // 1️⃣ Hisob
     const hisob = await this.hisobChiqarish(session);
 
-    // 2️⃣ PAYMENT (har qanday holatda yoziladi)
+    // 2️⃣ PAYMENT
     const payment = await this.paymentsService.createPayment({
-      session,
-      customer: session.customer ?? undefined,
-      user,
+      sessionId: session.id,
+      customerId: session.customer?.id,
+      userId: user.id,
       amount: hisob.jamiSumma,
       method,
     });
 
-    // 3️⃣ AGAR QARZ BO‘LSA → QARZ YARATILADI
+    // 3️⃣ DEBT (faqat DEBT bo‘lsa)
     if (method === PaymentMethod.DEBT) {
       if (!session.customer) {
-        throw new BadRequestException('Qarz faqat mijoz mavjud bo‘lsa yoziladi');
+        throw new BadRequestException(
+          'Qarz faqat mijoz mavjud bo‘lsa yoziladi',
+        );
       }
 
       await this.debtService.createDebt({
         customer: session.customer,
-        session,
+        session: { id: session.id } as Session,
         amount: hisob.jamiSumma,
-        // user,
       });
-    }
-
-    // 4️⃣ LOYALTY → BALL QO‘SHISH
-    if (session.customer) {
-      await this.loyaltyService.sessiyaUchunBall(session, session.customer, user);
     }
 
     return {
@@ -97,9 +114,17 @@ export class BillingService {
   }
 
   // =====================================================
-  // 3️⃣ QARZNI TO‘LASH (XODIM / ADMIN)
+  // 3️⃣ QARZNI TO‘LASH
   // =====================================================
-  async qarzniTolash(params: { debtId: string; summa: number; user: User }) {
-    return this.debtService.qarzniTolash(params.debtId, params.summa, params.user);
+  async qarzniTolash(params: {
+    debtId: string;
+    summa: number;
+    user: User;
+  }) {
+    return this.debtService.qarzniTolash(
+      params.debtId,
+      params.summa,
+      params.user,
+    );
   }
 }

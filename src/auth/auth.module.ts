@@ -17,7 +17,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: '15m',
+          expiresIn: '4h',
         },
       }),
       inject: [ConfigService],
@@ -27,4 +27,4 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   providers: [AuthService, JwtStrategy,],
   exports: [AuthService], // ⭐ AuthService'ni boshqa modullar ishlatishi mumkin
 })
-export class AuthModule {}
+export class AuthModule { }
