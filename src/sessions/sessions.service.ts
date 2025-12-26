@@ -40,7 +40,7 @@ export class SessionsService {
   ) { }
 
   // =====================================================
-  // ▶️ SESSIYA OCHISH (MIJOZ MAJBURIY)
+  // ▶️ OPEN SESSION
   // =====================================================
   async openSession(params: {
     tableId: string;
@@ -48,7 +48,6 @@ export class SessionsService {
     openedBy: User;
   }) {
     return this.dataSource.transaction(async (manager) => {
-      // 1️⃣ Stolni lock qilamiz
       const table = await manager.findOne(TableEntity, {
         where: { id: params.tableId },
         lock: { mode: 'pessimistic_write' },
@@ -58,59 +57,49 @@ export class SessionsService {
       if (!table.isActive) throw new BadRequestException('Stol faol emas');
       if (table.isOccupied) throw new BadRequestException('Stol band');
 
-      // 2️⃣ Mijozni tekshiramiz
       const customer = await manager.findOne(Customer, {
         where: { id: params.customerId },
       });
 
       if (!customer) throw new NotFoundException('Mijoz topilmadi');
 
-      // 3️⃣ Stolni band qilamiz
-      const updateResult = await manager.update(
+      await manager.update(
         TableEntity,
-        { id: table.id, isOccupied: false },
+        { id: table.id },
         { isOccupied: true },
       );
 
-      if (updateResult.affected !== 1) {
-        throw new BadRequestException('Stol band (parallel so‘rov)');
-      }
-
-      // 4️⃣ Sessiya yaratamiz
       const now = new Date();
 
-      const session = manager.create(Session, {
-        table,
-        customer,
-        openedBy: params.openedBy,
+      // 🔥 INSERT — SAVE EMAS
+      const result = await manager.insert(Session, {
+        table: { id: table.id },
+        customer: { id: customer.id },
+        openedBy: { id: params.openedBy.id },
         startedAt: now,
         lastPointCalculatedAt: now,
         status: SessionStatus.ACTIVE,
       });
 
-      await manager.save(session);
-      return session;
+      return {
+        id: result.identifiers[0].id,
+        table,
+        customer,
+        startedAt: now,
+        status: SessionStatus.ACTIVE,
+      };
     });
   }
 
   // =====================================================
-  // ⏸ PAUZA
+  // ⏸ PAUSE
   // =====================================================
   async pauseSession(sessionId: string) {
-    const session = await this.sessionRepo.findOne({
-      where: { id: sessionId },
-    });
-
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
     if (!session) throw new NotFoundException('Sessiya topilmadi');
 
-    if (session.status === SessionStatus.PAUSED) {
-      return session;
-    }
-
     if (session.status !== SessionStatus.ACTIVE) {
-      throw new BadRequestException(
-        'Faqat faol sessiyani pauzaga qo‘yish mumkin',
-      );
+      throw new BadRequestException('Faqat faol sessiya pauzalanadi');
     }
 
     session.status = SessionStatus.PAUSED;
@@ -118,23 +107,14 @@ export class SessionsService {
   }
 
   // =====================================================
-  // ▶️ DAVOM ETTIRISH
+  // ▶️ RESUME
   // =====================================================
   async resumeSession(sessionId: string) {
-    const session = await this.sessionRepo.findOne({
-      where: { id: sessionId },
-    });
-
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
     if (!session) throw new NotFoundException('Sessiya topilmadi');
 
-    if (session.status === SessionStatus.ACTIVE) {
-      return session;
-    }
-
     if (session.status !== SessionStatus.PAUSED) {
-      throw new BadRequestException(
-        'Faqat pauzadagi sessiyani davom ettirish mumkin',
-      );
+      throw new BadRequestException('Sessiya pauzada emas');
     }
 
     session.status = SessionStatus.ACTIVE;
@@ -144,7 +124,7 @@ export class SessionsService {
   }
 
   // =====================================================
-  // ⏹ SESSIYANI YOPISH (HISOB + PAYMENT + BALL)
+  // ⏹ CLOSE SESSION
   // =====================================================
   async closeSession(
     sessionId: string,
@@ -152,88 +132,115 @@ export class SessionsService {
     closedBy: User,
   ) {
     return this.dataSource.transaction(async (manager) => {
-      // 1️⃣ LOCK + RELATIONS
+      // 1️⃣ SESSION (LOCK)
       const session = await manager.findOne(Session, {
         where: { id: sessionId },
-        relations: ['table', 'customer'],
         lock: { mode: 'pessimistic_write' },
       });
 
       if (!session) throw new NotFoundException('Sessiya topilmadi');
 
-      if (![SessionStatus.ACTIVE, SessionStatus.PAUSED].includes(session.status)) {
+      if (
+        session.status !== SessionStatus.ACTIVE &&
+        session.status !== SessionStatus.PAUSED
+      ) {
         throw new BadRequestException('Sessiyani yopib bo‘lmaydi');
       }
 
-      // 2️⃣ VAQT
+      // 2️⃣ FULL SESSION
+      const sessionFull = await manager.findOne(Session, {
+        where: { id: sessionId },
+        relations: ['table', 'customer'],
+      });
+
+      if (!sessionFull?.table) {
+        throw new BadRequestException('Sessiya stolga bog‘lanmagan');
+      }
+
+      // 3️⃣ VAQT
       const endedAt = new Date();
       const minutes = Math.max(
         1,
         Math.ceil(
-          (endedAt.getTime() - session.startedAt.getTime()) / 60000,
+          (endedAt.getTime() - sessionFull.startedAt.getTime()) / 60000,
         ),
       );
       const hours = Math.ceil(minutes / 60);
 
-      // 3️⃣ STOL HISOBI
+      // 4️⃣ STOL NARXI
       const hourPrice = await this.settingsService.getSoatNarxi(
-        session.table.type,
+        sessionFull.table.type,
       );
       const tableAmount = hours * hourPrice;
 
-      // 4️⃣ BUYURTMALAR
+      // 5️⃣ BUYURTMALAR
       const raw = await manager
         .createQueryBuilder()
         .select('COALESCE(SUM(o.price * o.quantity), 0)', 'sum')
         .from('orders', 'o')
-        .where('o.session_id = :id', { id: session.id })
+        .where('o.session_id = :id', { id: sessionId })
         .andWhere('o.isCancelled = false')
         .getRawOne<{ sum: string }>();
 
       const ordersAmount = Number(raw?.sum ?? 0);
-      const totalAmount = tableAmount + ordersAmount;
+      let totalAmount = tableAmount + ordersAmount;
 
-      // 5️⃣ PAYMENT
-      await this.paymentsService.createPayment({
-        sessionId: session.id,
-        customerId: session.customer.id,
-        userId: closedBy.id,
-        amount: totalAmount,
-        method: paymentMethod,
-      });
+      // 6️⃣ PAYMENT
+      await this.paymentsService.createPayment(
+        {
+          sessionId,
+          customerId: sessionFull.customer?.id,
+          userId: closedBy.id,
+          amount: totalAmount,
+          method: paymentMethod,
+        },
+        manager,
+      );
 
-      // 6️⃣ SESSIYA YOPISH
-      session.status = SessionStatus.COMPLETED;
-      session.endedAt = endedAt;
-      session.closedBy = closedBy;
-      await manager.save(session);
+      // 7️⃣ SESSION UPDATE
+      await manager.update(
+        Session,
+        { id: sessionId },
+        {
+          status: SessionStatus.COMPLETED,
+          endedAt,
+          closedBy: { id: closedBy.id },
+        },
+      );
 
-      // 7️⃣ STOLNI BO‘SHATISH
-      session.table.isOccupied = false;
-      await manager.save(session.table);
+      // 8️⃣ TABLE FREE
+      await manager.update(
+        TableEntity,
+        { id: sessionFull.table.id },
+        { isOccupied: false },
+      );
 
-      // 8️⃣ BALL
-      const pointsEarned =
-        await this.loyaltyService.calculateFinalSessionPoints(
-          session,
-          session.customer,
-          closedBy,
-        );
+      // 9️⃣ ⭐ LOYALTY — ASOSIY JOY
+      const loyaltyResult = sessionFull.customer
+        ? await this.loyaltyService.applySessionPoints({
+          session: { ...sessionFull, endedAt } as Session,
+          customer: sessionFull.customer,
+          user: closedBy,
+        })
+        : { earned: 0, currentBalance: 0 };
 
-      // 9️⃣ RESPONSE (SESSION + RECEIPT)
+      // 🔟 RESPONSE
       return {
         session: {
-          id: session.id,
-          startedAt: session.startedAt,
+          id: sessionId,
+          startedAt: sessionFull.startedAt,
           endedAt,
           hours,
-          status: session.status,
+          status: SessionStatus.COMPLETED,
         },
         receipt: {
           tableAmount,
           ordersAmount,
           totalAmount,
-          pointsEarned,
+        },
+        loyalty: {
+          earnedThisSession: loyaltyResult.earned,
+          currentBalance: loyaltyResult.currentBalance,
         },
       };
     });
@@ -244,7 +251,7 @@ export class SessionsService {
   // =====================================================
   async forceClose(sessionId: string, user: User) {
     if (user.role !== UserRole.ADMIN) {
-      throw new ForbiddenException('Faqat admin ruxsatiga ega');
+      throw new ForbiddenException('Faqat admin');
     }
 
     return this.closeSession(sessionId, PaymentMethod.DEBT, user);

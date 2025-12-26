@@ -19,6 +19,9 @@ export class Customer {
   @Column({ nullable: true })
   phoneNumber?: string;
 
+  @Column({ type: 'int', default: 0 })
+  pointsBalance: number;
+
   // Mijozga tegishli sessiyalar
   @OneToMany(() => Session, (session) => session.customer)
   sessions: Session[];

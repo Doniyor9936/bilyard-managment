@@ -1,20 +1,35 @@
-// src/auth/strategies/jwt.strategy.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, ExtractJwt } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
-import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import { InjectRepository } from '@nestjs/typeorm'; // 🔥 SHART
+import { Repository } from 'typeorm';
+
+import { User } from 'src/user/user.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  constructor(configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+
+    @InjectRepository(User) // 🔥 SHU YO‘Q EDI
+    private readonly userRepo: Repository<User>,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: configService.get<string>('JWT_SECRET'),
     });
   }
 
-  async validate(payload: JwtPayload): Promise<JwtPayload> {
-    return payload; // req.user ga tushadi
+  async validate(payload: { sub: string }) {
+    const user = await this.userRepo.findOne({
+      where: { id: payload.sub },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    return user; // ✅ REAL USER ENTITY
   }
 }

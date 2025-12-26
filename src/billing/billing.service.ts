@@ -108,7 +108,7 @@ export class BillingService {
     return {
       sessionId: session.id,
       jamiSumma: hisob.jamiSumma,
-      paymentId: payment.id,
+      paymentId: payment,
       paymentMethod: method,
     };
   }

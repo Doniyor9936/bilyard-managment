@@ -1,13 +1,13 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { Payment } from "./payment.entity";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
 import { Debt } from "../debt/debt.entity";
+import { PaymentMethod } from "src/common/enums/payment-method.enum";
+import { DebtStatus } from "src/common/enums/debt.status.enum";
+import { EntityManager, Repository } from 'typeorm';
 import { Session } from "src/sessions/session.entity";
 import { Customer } from "src/customers/customer.entity";
 import { User } from "src/user/user.entity";
-import { PaymentMethod } from "src/common/enums/payment-method.enum";
-import { DebtStatus } from "src/common/enums/debt.status.enum";
 
 @Injectable()
 export class PaymentsService {
@@ -19,43 +19,48 @@ export class PaymentsService {
     private readonly debtRepo: Repository<Debt>,
   ) { }
 
-  async createPayment(params: {
-    sessionId: string;
-    customerId?: string;
-    userId: string;
-    amount: number;
-    method: PaymentMethod;
-  }) {
-    const { sessionId, customerId, userId, amount, method } = params;
+  async createPayment(
+    params: {
+      sessionId: string;
+      customerId?: string;
+      userId: string;
+      amount: number;
+      method: PaymentMethod;
+    },
+    manager?: EntityManager,
+  ) {
+    const repo = manager
+      ? manager.getRepository(Payment)
+      : this.paymentRepo;
 
-    if (method === PaymentMethod.DEBT && !customerId) {
-      throw new BadRequestException('Qarz uchun mijoz majburiy');
-    }
+    const debtRepo = manager
+      ? manager.getRepository(Debt)
+      : this.debtRepo;
 
-    // 1️⃣ PAYMENT
-    const payment = this.paymentRepo.create({
-      session: { id: sessionId },
-      customer: customerId ? { id: customerId } : null,
-      receivedBy: { id: userId },
-      amount,
-      method,
+    // 🔥 SAVE YO‘Q — FAQAT INSERT
+    await repo.insert({
+      session: { id: params.sessionId },
+      customer: params.customerId ? { id: params.customerId } : null,
+      receivedBy: { id: params.userId },
+      amount: params.amount,
+      method: params.method,
       paidAt: new Date(),
     });
 
-    await this.paymentRepo.save(payment);
+    if (params.method === PaymentMethod.DEBT) {
+      if (!params.customerId) {
+        throw new BadRequestException('Qarz uchun mijoz majburiy');
+      }
 
-    // 2️⃣ DEBT
-    if (method === PaymentMethod.DEBT) {
-      await this.debtRepo.insert({
-        customer: { id: customerId! },
-        session: { id: sessionId },
-        totalAmount: amount,
+      await debtRepo.insert({
+        session: { id: params.sessionId },
+        customer: { id: params.customerId },
+        totalAmount: params.amount,
         paidAmount: 0,
         status: DebtStatus.OCHIQ,
         createdAt: new Date(),
       });
     }
-
-    return payment;
   }
+
 }
