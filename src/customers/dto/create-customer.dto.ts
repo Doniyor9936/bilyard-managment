@@ -1,12 +1,21 @@
 import { IsOptional, IsString, IsPhoneNumber, Length } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCustomerDto {
-  // Mijozning to‘liq ismi
+  @ApiProperty({
+    example: 'Ali Valiyev',
+    description: 'Mijozning to‘liq ismi',
+  })
   @IsString({ message: 'Ism matn bo‘lishi kerak' })
-  @Length(2, 100, { message: 'Ism uzunligi 2–100 belgidan iborat bo‘lishi kerak' })
+  @Length(2, 100, {
+    message: 'Ism uzunligi 2–100 belgidan iborat bo‘lishi kerak',
+  })
   fullName: string;
 
-  // Telefon raqami (ixtiyoriy)
+  @ApiPropertyOptional({
+    example: '+998901234567',
+    description: 'Mijozning telefon raqami (ixtiyoriy, UZ formatda)',
+  })
   @IsOptional()
   @IsPhoneNumber('UZ', { message: 'Telefon raqami noto‘g‘ri formatda' })
   phoneNumber?: string;

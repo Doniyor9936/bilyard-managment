@@ -8,15 +8,15 @@ import { SessionsModule } from './sessions/sessions.module';
 import { OrdersModule } from './orders/orders.module';
 import { BillingModule } from './billing/billing.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { databaseConfig } from './config/database.config';
 import { UserModule } from './user/user.module';
 import { ConfigModule } from '@nestjs/config';
 import { CustomersModule } from './customers/customers.module';
+import { typeOrmAsyncConfig } from './config/database.config';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({isGlobal:true}),
-    TypeOrmModule.forRoot(databaseConfig),
+    ConfigModule.forRoot({ isGlobal: true }),
+    TypeOrmModule.forRootAsync(typeOrmAsyncConfig),
     AuthModule,
     AccountsModule,
     CustomersModule,
@@ -31,4 +31,4 @@ import { CustomersModule } from './customers/customers.module';
   controllers: [],
   providers: [],
 })
-export class AppModule {}
+export class AppModule { }

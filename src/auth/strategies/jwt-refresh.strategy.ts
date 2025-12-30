@@ -13,11 +13,11 @@ export class JwtRefreshStrategy extends PassportStrategy(
   constructor(configService: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: configService.get<string>('JWT_REFRESH_SECRET'),
+      secretOrKey: configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
     });
   }
 
   async validate(payload: JwtPayload): Promise<JwtPayload> {
-    return payload;
+    return payload; // refresh token faqat payload qaytaradi
   }
 }
