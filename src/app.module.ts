@@ -9,14 +9,18 @@ import { OrdersModule } from './orders/orders.module';
 import { BillingModule } from './billing/billing.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserModule } from './user/user.module';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CustomersModule } from './customers/customers.module';
-import { typeOrmAsyncConfig } from './config/database.config';
+import { databaseConfig } from './config/database.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    TypeOrmModule.forRootAsync(typeOrmAsyncConfig),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: databaseConfig,
+    }),
     AuthModule,
     AccountsModule,
     CustomersModule,
