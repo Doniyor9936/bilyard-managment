@@ -10,7 +10,7 @@ import { UserRole } from 'src/common/enums/user-role.enum';
 
 export class RegisterDto {
   @ApiProperty({
-    example: 'Doniyor Karimov',
+    example: 'Doniyor Qalandarov',
     description: 'Foydalanuvchining to‘liq ismi',
   })
   @IsString({ message: "Ism string bo'lishi kerak" })
