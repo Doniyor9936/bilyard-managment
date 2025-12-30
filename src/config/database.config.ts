@@ -18,7 +18,9 @@ export const databaseConfig = (
 
         logging: !isProduction,
 
-        ssl: true,
+        ssl: {
+            rejectUnauthorized: false,
+        },
         extra: {
             max: 10,
             idleTimeoutMillis: 30000,
