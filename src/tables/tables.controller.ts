@@ -13,7 +13,9 @@ import { JwtAuthGuard } from "src/common/guards/jwt-auth.guard";
 import { RolesGuard } from "src/common/guards/roles.guard";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { UserRole } from "src/common/enums/user-role.enum";
-import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { CreateTableDto } from "./dto/create-table.dto";
+import { UpdateTableDto } from "./dto/update-table.dto";
 
 @ApiTags("Tables")
 @ApiBearerAuth("access-token")
@@ -28,18 +30,10 @@ export class TablesController {
 
   @Post()
   @Roles(UserRole.ADMIN)
-  async createTable(
-    @Body()
-    body: {
-      name: string;
-      number: number;
-      type: TableType;
-      capacity?: number;
-      floor?: number;
-      section?: string;
-    }
-  ) {
-    return this.tablesService.createTable(body);
+  @ApiOperation({ summary: "Yangi stol yaratish" })
+  @ApiResponse({ status: 201, description: "Stol muvaffaqiyatli yaratildi." })
+  async createTable(@Body() dto: CreateTableDto) {
+    return this.tablesService.createTable(dto);
   }
 
   // ===============================
@@ -65,20 +59,8 @@ export class TablesController {
   // ===============================
   @Patch(":id")
   @Roles(UserRole.ADMIN)
-  async updateTable(
-    @Param("id") id: string,
-    @Body()
-    body: {
-      name?: string;
-      number?: number;
-      type?: TableType;
-      capacity?: number;
-      floor?: number;
-      section?: string;
-      isActive?: boolean;
-    }
-  ) {
-    return this.tablesService.updateTable(id, body);
+  async updateTable(@Param("id") id: string, @Body() dto: UpdateTableDto) {
+    return this.tablesService.updateTable(id, dto);
   }
 
   // ===============================

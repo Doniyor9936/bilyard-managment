@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TableEntity } from './table.entity';
 import { TableType } from 'src/common/enums/table-type.enum';
+import { UpdateTableDto } from './dto/update-table.dto';
 
 @Injectable()
 export class TablesService {
@@ -69,11 +70,31 @@ export class TablesService {
   // ===============================
   async updateTable(
     id: string,
-    data: Partial<Omit<TableEntity, 'id' | 'createdAt' | 'updatedAt'>>,
+    dto: UpdateTableDto,
   ): Promise<TableEntity> {
     const table = await this.getById(id);
 
-    Object.assign(table, data);
+    // ❌ band stolni o‘zgartirish mumkin emas
+    if (table.isOccupied) {
+      throw new BadRequestException(
+        'Band bo‘lgan stolni tahrirlab bo‘lmaydi',
+      );
+    }
+
+    // 🔁 number o‘zgaryaptimi — duplicate check
+    if (dto.number && dto.number !== table.number) {
+      const exists = await this.tableRepo.findOne({
+        where: { number: dto.number },
+      });
+
+      if (exists) {
+        throw new BadRequestException(
+          'Bu raqamdagi stol allaqachon mavjud',
+        );
+      }
+    }
+
+    Object.assign(table, dto);
 
     return this.tableRepo.save(table);
   }
