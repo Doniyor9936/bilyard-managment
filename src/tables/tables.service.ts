@@ -14,7 +14,7 @@ export class TablesService {
   // ===============================
   // ➕ STOL YARATISH (ADMIN)
   // ===============================
-  async createTable(params: {
+  async createTable(body: {
     name: string;
     number: number;
     type: TableType;
@@ -23,7 +23,7 @@ export class TablesService {
     section?: string;
   }): Promise<TableEntity> {
     const mavjud = await this.tableRepo.findOne({
-      where: { number: params.number },
+      where: { number: body.number },
     });
 
     if (mavjud) {
@@ -31,12 +31,12 @@ export class TablesService {
     }
 
     const table = this.tableRepo.create({
-      name: params.name,
-      number: params.number,
-      type: params.type,
-      capacity: params.capacity ?? 4,
-      floor: params.floor,
-      section: params.section,
+      name: body.name,
+      number: body.number,
+      type: body.type,
+      capacity: body.capacity ?? 4,
+      floor: body.floor,
+      section: body.section,
       isActive: true,
       isOccupied: false,
     });
