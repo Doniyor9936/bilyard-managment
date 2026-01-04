@@ -12,7 +12,7 @@ export class CustomersService {
     @InjectRepository(Customer)
     private readonly customerRepository: Repository<Customer>,
     private readonly loyaltyService: LoyaltyService,
-  ) {}
+  ) { }
 
   // ➕ Mijoz yaratish
   async create(dto: CreateCustomerDto): Promise<Customer> {
@@ -32,7 +32,7 @@ export class CustomersService {
   }
 
   // 🔍 Bitta mijoz
-  async findOne(id: string): Promise<Customer> {
+  async findOne(id: string) {
     const customer = await this.customerRepository.findOne({
       where: { id },
     });
@@ -41,7 +41,10 @@ export class CustomersService {
       throw new NotFoundException('Mijoz topilmadi');
     }
 
-    return customer;
+    return {
+      id: customer.id, fullName: customer.fullName, phoneNumber: customer.phoneNumber, createdAt: customer.createdAt ?? null,
+
+    };
   }
 
   // ✏️ Mijozni yangilash
@@ -55,9 +58,12 @@ export class CustomersService {
 
   // ❌ Mijoz o‘chirish (agar kerak bo‘lsa)
   async remove(id: string): Promise<{ message: string }> {
-    const customer = await this.findOne(id);
+    const customer = await this.customerRepository.delete({ id });
 
-    await this.customerRepository.remove(customer);
+    if (customer.affected === 0) {
+      throw new NotFoundException("mijoz topilmadi");
+
+    }
 
     return { message: 'Mijoz o‘chirildi' };
   }

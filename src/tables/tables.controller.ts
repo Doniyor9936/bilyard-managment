@@ -13,7 +13,10 @@ import { JwtAuthGuard } from "src/common/guards/jwt-auth.guard";
 import { RolesGuard } from "src/common/guards/roles.guard";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { UserRole } from "src/common/enums/user-role.enum";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 
+@ApiTags("Tables")
+@ApiBearerAuth("access-token")
 @Controller("tables")
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TablesController {
@@ -22,6 +25,7 @@ export class TablesController {
   // ===============================
   // ➕ STOL YARATISH (ADMIN)
   // ===============================
+
   @Post()
   @Roles(UserRole.ADMIN)
   async createTable(

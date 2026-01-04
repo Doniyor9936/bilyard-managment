@@ -7,7 +7,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class UserService {
-  constructor(@InjectRepository(User) private readonly userRepository: Repository<User>) {}
+  constructor(@InjectRepository(User) private readonly userRepository: Repository<User>) { }
 
   async createUser(dto: Partial<User>): Promise<User> {
     const user = this.userRepository.create(dto);
@@ -22,6 +22,13 @@ export class UserService {
       throw new NotFoundException('Foydalanuvchi topilmadi');
     }
     return findUser;
+  }
+  async getAllUser(): Promise<User[]> {
+    const findUser = await this.userRepository.find();
+    if (findUser) {
+      throw new NotFoundException('Foydalanuvchi topilmadi');
+    }
+    return this.userRepository.find();
   }
 
   async getUserByIdOrFail(id: string): Promise<User> {

@@ -6,7 +6,10 @@ import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { UserUpdateDto } from './dto/user.update.dto';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('User')
+@ApiBearerAuth('access-token')
 @Controller('user')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UserController {
@@ -22,6 +25,11 @@ export class UserController {
   @Roles(UserRole.ADMIN)
   async findByPhone(@Param('phoneNumber') phoneNumber: string) {
     return this.userService.findByPhone(phoneNumber)
+  }
+  @Get('getAll')
+  @Roles(UserRole.ADMIN)
+  async find() {
+    return this.userService.getAllUser();
   }
 
   @Get(':accountId')

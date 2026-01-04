@@ -16,7 +16,10 @@ import { UserRole } from 'src/common/enums/user-role.enum';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import { User } from 'src/user/user.entity';
 import { Session } from 'src/sessions/session.entity';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('Loyalty')
+@ApiBearerAuth('access-token')
 @Controller('loyalty')
 @UseGuards(JwtAuthGuard)
 export class LoyaltyController {

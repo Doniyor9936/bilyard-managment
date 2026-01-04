@@ -14,7 +14,10 @@ import { UserRole } from 'src/common/enums/user-role.enum';
 import { PaymentMethod } from 'src/common/enums/payment-method.enum';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import { User } from 'src/user/user.entity';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('Sessions')
+@ApiBearerAuth('access-token')
 @Controller('sessions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SessionsController {
