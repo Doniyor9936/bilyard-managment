@@ -14,7 +14,7 @@ export const databaseConfig = (
         url: configService.get<string>('DATABASE_URL'),
 
         autoLoadEntities: true,
-        synchronize: !isProduction,
+        synchronize: true,
 
         logging: !isProduction,
 
