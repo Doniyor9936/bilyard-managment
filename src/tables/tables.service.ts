@@ -68,10 +68,7 @@ export class TablesService {
   // ===============================
   // ✏️ STOLNI YANGILASH
   // ===============================
-  async updateTable(
-    id: string,
-    dto: UpdateTableDto,
-  ): Promise<TableEntity> {
+  async updateTable(id: string, dto: UpdateTableDto): Promise<TableEntity> {
     const table = await this.getById(id);
 
     // ❌ band stolni o‘zgartirish mumkin emas
