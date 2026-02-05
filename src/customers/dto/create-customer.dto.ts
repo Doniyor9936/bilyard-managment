@@ -12,11 +12,10 @@ export class CreateCustomerDto {
   })
   fullName: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: '+998901234567',
     description: 'Mijozning telefon raqami (ixtiyoriy, UZ formatda)',
   })
-  @IsOptional()
   @IsPhoneNumber('UZ', { message: 'Telefon raqami noto‘g‘ri formatda' })
-  phoneNumber?: string;
+  phoneNumber: string;
 }

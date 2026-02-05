@@ -1,5 +1,5 @@
 export enum TransactionType {
-  GAME_TIME = 'oyun_vaqti',
+  GAME_TIME = 'oyin_vaqti',
   FOOD_DRINK = 'ovqat_ichimlik',
   SERVICE = 'xizmat',
   PENALTY = 'jarima',

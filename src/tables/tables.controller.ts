@@ -33,6 +33,8 @@ export class TablesController {
   @ApiOperation({ summary: "Yangi stol yaratish" })
   @ApiResponse({ status: 201, description: "Stol muvaffaqiyatli yaratildi." })
   async createTable(@Body() dto: CreateTableDto) {
+    console.log(dto);
+
     return this.tablesService.createTable(dto);
   }
 

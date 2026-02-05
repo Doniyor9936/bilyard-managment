@@ -23,28 +23,34 @@ export class TablesService {
     floor?: number;
     section?: string;
   }): Promise<TableEntity> {
-    const mavjud = await this.tableRepo.findOne({
-      where: { number: body.number },
-    });
+    try {
+      const mavjud = await this.tableRepo.findOne({
+        where: { number: body.number },
+      });
+      console.log(mavjud);
+      if (mavjud) {
+        throw new BadRequestException('Bu raqamdagi stol allaqachon mavjud');
+      }
+      const table = this.tableRepo.create({
+        name: body.name,
+        number: body.number,
+        type: body.type,
+        capacity: body.capacity ?? 4,
+        floor: body.floor,
+        section: body.section,
+        isActive: true,
+        isOccupied: false,
+      });
+      console.log(table);
 
-    if (mavjud) {
-      throw new BadRequestException('Bu raqamdagi stol allaqachon mavjud');
+
+      return this.tableRepo.save(table);
     }
+    catch (err) {
+      throw new Error("Stol yaratishda xatolik yuz berdi: " + err.message);
 
-    const table = this.tableRepo.create({
-      name: body.name,
-      number: body.number,
-      type: body.type,
-      capacity: body.capacity ?? 4,
-      floor: body.floor,
-      section: body.section,
-      isActive: true,
-      isOccupied: false,
-    });
-
-    return this.tableRepo.save(table);
+    }
   }
-
   // ===============================
   // 📄 BARCHA STOLLAR
   // ===============================

@@ -16,7 +16,7 @@ export enum TableName {
     VIP_1 = 'vip_1',
     VIP_2 = 'vip_2',
     VIP_3 = 'vip_3',
-    VIP_4 = 'vip_1',
-    VIP_5 = 'vip_2',
-    VIP_6 = 'vip_3',
+    VIP_4 = 'vip_4',
+    VIP_5 = 'vip_5',
+    VIP_6 = 'vip_6',
 }
